@@ -12,12 +12,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+
       - name: Asililiqlari yukle
         working-directory: ./app
         run: npm install
+
+      - name: Build artifakti saxla
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-build
+          path: app/
 
   sca-scan:
     name: 🔍 SCA Scan (OWASP)
@@ -38,9 +46,27 @@ jobs:
         run: |
           wget -q https://github.com/jeremylong/DependencyCheck/releases/download/v10.0.3/dependency-check-10.0.3-release.zip
           unzip -q dependency-check-10.0.3-release.zip
+          chmod +x ./dependency-check/bin/dependency-check.sh
 
-      - name: sca-reports qovluğu yarat
+      - name: sca-reports qovlugu yarat
         run: mkdir -p ./sca-reports
+
+      - name: Debug yoxla
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          echo "=== Java versiyasi ==="
+          java -version
+          echo "=== NVD key yoxlama ==="
+          if [ -z "$NVD_API_KEY" ]; then
+            echo "XETA: Key tapilmadi!"
+          else
+            echo "Key movcuddur, uzunlugu: ${#NVD_API_KEY}"
+          fi
+          echo "=== App qovluqu ==="
+          ls -la ./app/
+          echo "=== Dependency-check ==="
+          ls -la ./dependency-check/bin/
 
       - name: SCA Scan et
         env:
@@ -53,17 +79,24 @@ jobs:
             --format JSON \
             --out ./sca-reports \
             --enableRetired \
-            --nvdApiKey $NVD_API_KEY
+            --nvdApiKey $NVD_API_KEY \
+            -v 2>&1 | tail -100
         continue-on-error: true
 
-      - name: Report saxla
+      - name: Scan neticesi yoxla
+        if: always()
+        run: |
+          echo "=== sca-reports icindekiler ==="
+          ls -la ./sca-reports/ || echo "Qovluq boshdur"
+
+      - name: SCA Report saxla
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: sca-report
           path: sca-reports/
 
-      - name: Neticeni goster
+      - name: Zeiflik sayini goster
         if: always()
         run: |
           if [ -f "sca-reports/dependency-check-report.json" ]; then
