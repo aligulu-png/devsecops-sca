@@ -1,0 +1,116 @@
+name: DevSecOps Pipeline - SCA Scan
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # ─────────────────────────────────────────
+  # MƏRHƏLƏ 1: Build
+  # ─────────────────────────────────────────
+  build:
+    name: 🔨 Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kodu yüklə (Checkout)
+        uses: actions/checkout@v3
+
+      - name: Node.js quraşdır
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: app/package.json
+
+      - name: Asılılıqları yüklə (npm install)
+        working-directory: ./app
+        run: npm install
+
+      - name: Build artifact-ı saxla
+        uses: actions/upload-artifact@v3
+        with:
+          name: app-build
+          path: app/
+
+  # ─────────────────────────────────────────
+  # MƏRHƏLƏ 2: SCA Scan (OWASP Dependency-Check)
+  # ─────────────────────────────────────────
+  sca-scan:
+    name: 🔍 SCA Scan (OWASP)
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Kodu yüklə
+        uses: actions/checkout@v3
+
+      - name: Node.js quraşdır
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: npm install (scan üçün)
+        working-directory: ./app
+        run: npm install
+
+      - name: OWASP Dependency-Check scan et
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'vulnerable-demo-app'
+          path: './app'
+          format: 'HTML,JSON'
+          out: 'sca-reports'
+          args: >
+            --enableRetired
+            --enableExperimental
+            --failOnCVSS 7
+
+      - name: SCA Report-u saxla
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: sca-report
+          path: sca-reports/
+
+      - name: Kritik zəiflik varsa pipeline-ı dayandır
+        run: |
+          echo "SCA Scan tamamlandı. Report artifacts bölməsindədir."
+          if [ -f "sca-reports/dependency-check-report.json" ]; then
+            CRITICAL=$(cat sca-reports/dependency-check-report.json | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          deps = data.get('dependencies', [])
+          count = sum(
+              1 for d in deps
+              for v in d.get('vulnerabilities', [])
+              if v.get('cvssv3', {}).get('baseScore', 0) >= 9.0
+          )
+          print(count)
+            ")
+            echo "Kritik zəiflik sayı: $CRITICAL"
+            if [ "$CRITICAL" -gt "0" ]; then
+              echo "❌ $CRITICAL KRİTİK ZƏİFLİK TAPILDI! Pipeline dayandırıldı."
+              exit 1
+            fi
+          fi
+
+  # ─────────────────────────────────────────
+  # MƏRHƏLƏ 3: Nəticə Bildirişi
+  # ─────────────────────────────────────────
+  notify:
+    name: 📢 Nəticə
+    runs-on: ubuntu-latest
+    needs: [build, sca-scan]
+    if: always()
+
+    steps:
+      - name: Pipeline nəticəsini göstər
+        run: |
+          echo "=================================="
+          echo "  DevSecOps Pipeline Nəticəsi"
+          echo "=================================="
+          echo "Build:    ${{ needs.build.result }}"
+          echo "SCA Scan: ${{ needs.sca-scan.result }}"
+          echo "=================================="
