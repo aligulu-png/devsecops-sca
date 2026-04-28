@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: 🔨 Build
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,7 +28,7 @@ jobs:
           path: app/
 
   sca-scan:
-    name: 🔍 SCA Scan
+    name: SCA Scan
     runs-on: ubuntu-latest
     needs: build
     steps:
@@ -59,7 +59,7 @@ jobs:
           path: app/sca-report.json
 
   notify:
-    name: 📢 Neticə
+    name: Neticə
     runs-on: ubuntu-latest
     needs: [build, sca-scan]
     if: always()
