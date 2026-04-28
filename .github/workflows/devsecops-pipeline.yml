@@ -54,6 +54,9 @@ jobs:
           wget https://github.com/jeremylong/DependencyCheck/releases/download/v10.0.3/dependency-check-10.0.3-release.zip
           unzip dependency-check-10.0.3-release.zip
 
+      - name: sca-reports qovluğu yarat
+        run: mkdir -p ./sca-reports
+
       - name: SCA Scan et
         run: |
           ./dependency-check/bin/dependency-check.sh \
@@ -63,8 +66,16 @@ jobs:
             --format JSON \
             --out ./sca-reports \
             --enableRetired \
-            --nvdApiKey ${{ secrets.NVD_API_KEY }} \
-            || true
+            --noupdate
+        continue-on-error: true
+
+      - name: Qovluq mövcut yoxla
+        if: always()
+        run: |
+          echo "=== sca-reports icindekiler ==="
+          ls -la ./sca-reports/ || echo "Qovluq boshdur"
+          echo "=== dependency-check log ==="
+          cat ./sca-reports/dependency-check.log 2>/dev/null || echo "Log yoxdur"
 
       - name: SCA Report saxla
         uses: actions/upload-artifact@v4
